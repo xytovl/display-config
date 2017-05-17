@@ -145,7 +145,7 @@ class DisplayConfig:
                         configured_crtcs[i].outputs.append(output_request.id_)
                         return self._configure(
                             output_requests[1:],
-                            configured_outputs + output_configuration,
+                            configured_outputs + [output_configuration],
                             configured_crtcs)
                     else:
                         # Clone can not be done at crtc level,

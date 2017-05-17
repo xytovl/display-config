@@ -273,22 +273,26 @@ def main():
                                    help='width x height',
                                    choices=list(mode_choices.keys()),
                                    default=default_mode)
-        output_parser.add_argument('-x', '--x',
-                                   help='Horizontal offset of the screen',
-                                   type=int,
-                                   default=crtc.x if crtc is not None else 0)
-        output_parser.add_argument('-y', '--y',
-                                   help='Vertical offset of the screen',
-                                   type=int,
-                                   default=crtc.y if crtc is not None else 0)
-        output_parser.add_argument('--presentation',
-                                   help='Presentation mode',
-                                   type=bool, default=False)
+        position_group = output_parser.add_mutually_exclusive_group()
+
+        position_group.add_argument(
+                '--position',
+                help='Horizontal, vertical offset of the screen',
+                metavar=('X', 'Y'),
+                type=int,
+                nargs=2,
+                default=[crtc.x, crtc.y] if crtc is not None else [0, 0])
+
         # Clone can only be specified for second screen or later
         if processed_outputs:
-            output_parser.add_argument('--clone',
-                                       help='Clone of the provided screen',
-                                       choices=processed_outputs.keys())
+            position_group.add_argument('--clone',
+                                        help='Clone of the provided screen',
+                                        choices=processed_outputs.keys())
+
+        output_parser.add_argument('--presentation',
+                                   help='Presentation mode',
+                                   action='store_true',
+                                   default=False)
 
         # Parameter for following screens
         remaining = list(set(outputs.keys()) - set(processed_outputs.keys()))
@@ -313,7 +317,7 @@ def main():
         output_requests.append(OutputRequest(
             output.id_,
             mode=mode_choices[args.mode],
-            x=args.x, y=args.y,
+            x=args.position[0], y=args.position[1],
             presentation=args.presentation, clone_of=clone))
 
     dc.configure(output_requests)

@@ -69,6 +69,10 @@ class OutputRequest:
             self.transform = clone_of.transform
 
 
+class InvalidConfigurationException(Exception):
+    pass
+
+
 class DisplayConfig:
     def __init__(self):
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
@@ -169,10 +173,10 @@ class DisplayConfig:
                     output_requests[1:],
                     configured_outputs + [output_configuration],
                     configured_crtcs + [configured_crtc])
-            except:
+            except InvalidConfigurationException:
                 pass
 
-        raise Exception(
+        raise InvalidConfigurationException(
             "Unable to find a configuration for the requested outputs")
 
     def configure(self, output_requests, persistent=False):

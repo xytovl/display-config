@@ -5,7 +5,6 @@ Utility to control gnome-shell output configuration.
 import argparse
 import collections
 import copy
-import sys
 from gi.repository import Gio, GLib
 
 Crtc = collections.namedtuple(
@@ -67,7 +66,7 @@ class OutputRequest:
             self.mode = clone_of.mode
             self.x = clone_of.x
             self.y = clone_of.y
-            self.transform.clone_of.transform
+            self.transform = clone_of.transform
 
 
 class DisplayConfig:
@@ -187,29 +186,24 @@ class DisplayConfig:
 
 
 def main():
-    # Split arguments in groups:
-    # One argument with no leading dash followed
-    # by options, until the next non-option argument
-    # program --opt1 a --opt2 b X --x1 c Y Z will be:
-    # [['--opt1', 'a', '--opt2', 'b'], ['X', '--x1', 'c'], ['Y'], ['Z']]
-    arg_packs = []
-    pack = []
-    for arg in sys.argv[1:]:
-        if arg.startswith('-') or pack and pack[-1].startswith('-'):
-            pack.append(arg)
-        else:
-            arg_packs.append(pack)
-            pack = [arg]
-    arg_packs.append(pack)
+    dc = DisplayConfig()
 
+    outputs = {output.name: output for output in dc.outputs}
+    output_names = list(outputs.keys())
     main_parser = argparse.ArgumentParser(
         description='Manage display configuration.')
 
-    main_parser.parse_args(arg_packs[0])
+    main_parser.add_argument('OUTPUT',
+                             help='Output to enable',
+                             nargs='?',
+                             choices=output_names)
+    main_parser.add_argument('options',
+                             help=argparse.SUPPRESS,
+                             nargs=argparse.REMAINDER)
 
-    dc = DisplayConfig()
+    args = main_parser.parse_args()
 
-    if len(arg_packs) == 1:
+    if args.OUTPUT is None:
         # Print the current configuration and quit
         modes = {}
         for mode in dc.modes:
@@ -242,74 +236,76 @@ def main():
                     printed_modes.add(mode)
         return
 
-    outputs = {}
-    for output in dc.outputs:
-        outputs[output.name] = output
-
+    # Process outputs one by one
+    processed_outputs = {}
     output_requests = []
-    for i, pack in enumerate(arg_packs[1:]):
-        if pack[0] not in outputs:
-            print('Output {output} unknown, '
-                  'possible outputs: {available}'.format(
-                      output=pack[0],
-                      available=', '.join(outputs.keys())))
-            sys.exit(1)
-        if pack[0] in [p[0] for p in arg_packs[1:i]]:
-            print('Output {output} provided twice'.format(output=pack[0]))
-            sys.exit(1)
-
-        output = outputs[pack[0]]
+    while getattr(args, 'OUTPUT', False):
+        output = outputs[args.OUTPUT]
+        processed_outputs[args.OUTPUT] = output
 
         if output.current_crtc == -1:
             crtc = None
         else:
             crtc = dc.get_crtc(output.current_crtc)
 
-        mode_choices = {}
+        # List modes available for current output
         default_mode = None
+        mode_choices = {}
         for mode_id in output.modes:
             mode = dc.get_mode(mode_id)
-            short_mode = '{width}x{height}'.format(
+            mode_string = '{width}x{height}'.format(
                 width=mode.width, height=mode.height)
             if default_mode is None or (
                     crtc is not None and crtc.current_mode == mode_id):
-                default_mode = short_mode
+                default_mode = mode_string
 
-            if (short_mode not in mode_choices or
-                    mode_choices[short_mode].frequency < mode.frequency):
-                mode_choices[short_mode] = mode
+            if (mode_string not in mode_choices or
+                    mode_choices[mode_string].frequency < mode.frequency):
+                mode_choices[mode_string] = mode
 
-        screen_parser = argparse.ArgumentParser(
+        output_parser = argparse.ArgumentParser(
             description='Settings for one display.')
-        screen_parser.add_argument('name',
-                                   help='Name of the display to configure')
-        screen_parser.add_argument('--mode',
+        output_parser.add_argument('--mode',
                                    help='widthxheight[@refresh]',
                                    choices=list(mode_choices.keys()),
                                    default=default_mode)
-        screen_parser.add_argument('-x', '--x',
+        output_parser.add_argument('-x', '--x',
                                    help='Horizontal offset of the screen',
                                    type=int,
                                    default=crtc.x if crtc is not None else 0)
-        screen_parser.add_argument('-y', '--y',
+        output_parser.add_argument('-y', '--y',
                                    help='Vertical offset of the screen',
                                    type=int,
                                    default=crtc.y if crtc is not None else 0)
-        screen_parser.add_argument('--presentation',
+        output_parser.add_argument('--presentation',
                                    help='Presentation mode',
                                    type=bool, default=False)
-        if i > 0:
-            choices = [pack[0] for pack in arg_packs[1:i+1]]
-            screen_parser.add_argument('--clone',
+        # Clone can only be specified for second screen or later
+        if processed_outputs:
+            output_parser.add_argument('--clone',
                                        help='Clone of the provided screen',
-                                       choices=choices)
+                                       choices=processed_outputs.keys())
 
-        args = screen_parser.parse_args(pack)
+        # Parameter for following screens
+        remaining = list(set(outputs.keys()) - set(processed_outputs.keys()))
+        if remaining:
+            output_parser.add_argument('OUTPUT',
+                                       help='Next output to enable',
+                                       nargs='?',
+                                       choices=remaining)
+            output_parser.add_argument('options',
+                                       help=argparse.SUPPRESS,
+                                       nargs=argparse.REMAINDER)
 
-        if i > 0 and args.clone:
-            clone = None  # FIXME implement
+        args = output_parser.parse_args(args.options)
+
+        if output_requests and args.clone:
+            for req in output_requests:
+                if req.id_ == processed_outputs[args.clone].id_:
+                    clone = req
         else:
             clone = None
+
         output_requests.append(OutputRequest(
             output.id_,
             mode=mode_choices[args.mode],

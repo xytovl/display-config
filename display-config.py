@@ -270,7 +270,7 @@ def main():
         output_parser = argparse.ArgumentParser(
             description='Settings for one display.')
         output_parser.add_argument('--mode',
-                                   help='widthxheight[@refresh]',
+                                   help='width x height',
                                    choices=list(mode_choices.keys()),
                                    default=default_mode)
         output_parser.add_argument('-x', '--x',

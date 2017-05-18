@@ -197,6 +197,10 @@ def main():
     main_parser = argparse.ArgumentParser(
         description='Manage display configuration.')
 
+    main_parser.add_argument('--persistent',
+                             help='Make this configuration the default',
+                             action='store_true')
+
     main_parser.add_argument('OUTPUT',
                              help='Output to enable',
                              nargs='?',
@@ -206,6 +210,7 @@ def main():
                              nargs=argparse.REMAINDER)
 
     args = main_parser.parse_args()
+    persistent = args.persistent
 
     if args.OUTPUT is None:
         # Print the current configuration and quit
@@ -320,7 +325,7 @@ def main():
             x=args.position[0], y=args.position[1],
             presentation=args.presentation, clone_of=clone))
 
-    dc.configure(output_requests)
+    dc.configure(output_requests, persistent=persistent)
 
 
 if __name__ == '__main__':
